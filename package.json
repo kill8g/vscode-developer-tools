@@ -1,0 +1,103 @@
+{
+  "name": "w-developer-tools",
+  "icon": "1765255626.png",
+  "displayName": "w-developer-tools",
+  "description": "W项目服务端辅助开发工具",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.98.2"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "w-developer-tools.createEmptyModule",
+        "title": "w-developer-tools:创建空模块"
+      },
+      {
+        "command": "w-developer-tools.protoMsgId",
+        "title": "w-developer-tools:生成协议ID"
+      },
+      {
+        "command": "w-developer-tools.createProtoModule",
+        "title": "w-developer-tools:创建协议模块"
+      },
+      {
+        "command": "w-developer-tools.hotfixServerCode",
+        "title": "w-developer-tools:热更服务器代码"
+      },
+      {
+        "command": "w-developer-tools.hotfixConfig",
+        "title": "w-developer-tools:热更策划配置"
+      },
+      {
+        "command": "w-developer-tools.hotfixProto",
+        "title": "w-developer-tools:热更协议"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "w-developer-tools.protoMsgId",
+          "group": "navigation",
+          "when": "resourceExtname == .proto"
+        },
+        {
+          "command": "w-developer-tools.createEmptyModule",
+          "group": "navigation",
+          "when": "resourceLangId == lua"
+        },
+        {
+          "command": "w-developer-tools.createProtoModule",
+          "group": "navigation",
+          "when": "resourceExtname == .proto"
+        },
+        {
+          "command": "w-developer-tools.hotfixServerCode",
+          "group": "navigation",
+          "when": "resourceLangId == lua"
+        },
+        {
+          "command": "w-developer-tools.hotfixConfig",
+          "group": "navigation",
+          "when": "resourceLangId == lua"
+        },
+        {
+          "command": "w-developer-tools.hotfixProto",
+          "group": "navigation",
+          "when": "resourceExtname == .proto || resourceExtname == .lua"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^2.10.1",
+    "@types/google-protobuf": "^3.15.12",
+    "@types/ini": "^4.1.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.98.2",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.10.1",
+    "ini": "^6.0.0",
+    "protobufjs": "^7.5.4"
+  }
+}
