@@ -9,6 +9,7 @@ import {NetDefinesParser} from './parselua'
 import {ModuleCreationManager} from './generatemodule'
 import {SelectionPanel} from './popwindow'
 import {netcat} from './nc'
+import * as setting from './setting'
 
 
 // ==================== 命令注册 ====================
@@ -154,6 +155,13 @@ function HotfixProtoEvent(context: vscode.ExtensionContext) : vscode.Disposable 
     return hotfixProto;
 }
 
+function ModifySettingEvent(context: vscode.ExtensionContext) : vscode.Disposable {
+    const modifySetting = vscode.commands.registerCommand('w-developer-tools.modifySetting', () => {
+        setting.ModifySetting(context)
+    });
+    return modifySetting
+}
+
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(createProtoModule);
     context.subscriptions.push(createEmptyModule);
@@ -161,4 +169,5 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(HotfixServerCodeEvent(context));
     context.subscriptions.push(HotfixConfigEvent(context));
     context.subscriptions.push(HotfixProtoEvent(context));
+    context.subscriptions.push(ModifySettingEvent(context));
 }

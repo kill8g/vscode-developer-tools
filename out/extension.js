@@ -44,6 +44,7 @@ const parselua_1 = require("./parselua");
 const generatemodule_1 = require("./generatemodule");
 const popwindow_1 = require("./popwindow");
 const nc_1 = require("./nc");
+const setting = __importStar(require("./setting"));
 // ==================== 命令注册 ====================
 const moduleManager = new generatemodule_1.ModuleCreationManager();
 const createEmptyModule = vscode.commands.registerCommand('w-developer-tools.createEmptyModule', () => moduleManager.createEmptyModule());
@@ -173,6 +174,12 @@ function HotfixProtoEvent(context) {
     });
     return hotfixProto;
 }
+function ModifySettingEvent(context) {
+    const modifySetting = vscode.commands.registerCommand('w-developer-tools.modifySetting', () => {
+        setting.ModifySetting(context);
+    });
+    return modifySetting;
+}
 function activate(context) {
     context.subscriptions.push(createProtoModule);
     context.subscriptions.push(createEmptyModule);
@@ -180,5 +187,6 @@ function activate(context) {
     context.subscriptions.push(HotfixServerCodeEvent(context));
     context.subscriptions.push(HotfixConfigEvent(context));
     context.subscriptions.push(HotfixProtoEvent(context));
+    context.subscriptions.push(ModifySettingEvent(context));
 }
 //# sourceMappingURL=extension.js.map

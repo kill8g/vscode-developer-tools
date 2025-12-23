@@ -43,6 +43,11 @@ interface ModuleCreationConfig {
     targetModulePath: string;
 }
 
+interface ProtoMessageInfo {
+    name: string;
+    fields: protobuf.Field[];
+}
+
 class LuaFileGenerator {
     private config: ModuleCreationConfig;
 
@@ -65,7 +70,7 @@ class LuaFileGenerator {
         return `require "player.playerhandler.${this.config.moduleName}.inner.${this.config.moduleName}_tools"`;
     }
 
-    private getBaseModuleContent(description: string, additionalRequires: string[] = []): string {
+    private getBaseModuleContent(description: string, additionalRequires: string[] = [], handlerFunctions: string[] = []): string {
         const requires = [
             `local playerhandler = require "player.playerhandler.init"`,
             `local ${this.config.moduleName}_tools = ${this.getToolsRequirePath()}`,
@@ -82,6 +87,8 @@ class LuaFileGenerator {
 ${requires.join('\n')}
 
 local M = hotupdate_module()
+
+${handlerFunctions.length > 0 ? handlerFunctions.join('\n\n') : ''}
 
 return M`;
     }
@@ -141,11 +148,11 @@ return M`;
         return { fileName, filePath, content };
     }
 
-    generateMainFile(): LuaFileTemplate {
+    generateMainFile(handlerFunctions: string[] = []): LuaFileTemplate {
         const fileName = `${this.config.moduleName}.lua`;
         const filePath = path.join(this.config.targetModulePath, fileName);
 
-        const content = this.getBaseModuleContent('模块公共接口, 暴露给其他模块使用');
+        const content = this.getBaseModuleContent('模块公共接口, 暴露给其他模块使用', [], handlerFunctions);
 
         return { fileName, filePath, content };
     }
@@ -206,60 +213,23 @@ return M`;
         return { fileName, filePath, content };
     }
 
-    generateProtoNetworkFile(protoRoot: string, protoFileName: string): LuaFileTemplate {
-        const fileName = 'network.lua';
-        const filePath = path.join(this.config.targetModulePath, fileName);
-
-        let content = `${this.createFileHeader(fileName)}
-local ${this.config.moduleName}_tools = ${this.getToolsRequirePath()}
-local playerhandler = require "player.playerhandler.init"
-
-local M = hotupdate_module()
-`;
-
-        // 解析proto文件
-        const files = [
-            'protobuf/common.proto',
-            `protobuf/${protoFileName}`
-        ];
-
-        const root = new Root();
-        for (const file of files) {
-            const fullPath = path.join(protoRoot, file);
-            const fileContent = fs.readFileSync(fullPath, 'utf8');
-            parse(fileContent, root, { keepCase: true, alternateCommentMode: true });
-        }
-
-        const messages = root.nestedArray.filter(item => item instanceof protobuf.Type);
-        for (const message of messages) {
-            const messageName = message.name;
-            if (messageName.endsWith('Req')) {
-                const functionName = `${messageName}`;
-                const checkCode = this.generateFieldChecks(message, messageName);
-                const respName = messageName.replace(/Req$/, 'Resp');
-                content += `
-function M.${functionName}(pid, msg)
-${checkCode}
-    local result = playerhandler.${this.config.moduleName}.${messageName}(pid, msg)
-    if result == nil then
-        -- 模块内部处理返回协议相关的逻辑
-        return
-    end
-    return "${respName}", result
-end
-`;
-            }
-        }
-
-        content += `\nreturn M`;
-
-        return { fileName, filePath, content };
-    }
-
     private generateFieldChecks(message: protobuf.Type, messageName: string): string {
         let checkCode = '';
-        const fields = message.fieldsArray;
         const respName = messageName.replace(/Req$/, 'Resp');
+
+        // 获取消息字段
+        let fields: protobuf.Field[] = [];
+        try {
+            if (message.fields) {
+                // 从fields对象中获取所有字段
+                fields = Object.values(message.fields);
+            } else if (message.fieldsArray) {
+                // 使用fieldsArray
+                fields = message.fieldsArray;
+            }
+        } catch (error) {
+            console.warn(`无法获取消息 ${messageName} 的字段:`, error);
+        }
 
         for (const field of fields) {
             const fieldName = field.name;
@@ -288,17 +258,137 @@ end
         return checkCode || '    -- 无需参数检查';
     }
 
+    private generateHandlerFunction(messageName: string): string {
+        return `---${messageName}请求处理函数
+---@param pid integer 玩家ID
+---@param msg table 请求消息
+---@return table|nil 返回响应消息，如果为nil则表示内部处理返回协议
+function M.${messageName}(pid, msg)
+    -- TODO: 实现${messageName}的业务逻辑
+    return nil
+end`;
+    }
+
+    parseProtoMessages(protoRoot: string, protoFileName: string): ProtoMessageInfo[] {
+        const messages: ProtoMessageInfo[] = [];
+
+        // 解析proto文件
+        const files = [
+            'protobuf/common.proto',
+            `protobuf/${protoFileName}`
+        ];
+
+        const root = new Root();
+        for (const file of files) {
+            const fullPath = path.join(protoRoot, file);
+            try {
+                const fileContent = fs.readFileSync(fullPath, 'utf8');
+                parse(fileContent, root, { keepCase: true, alternateCommentMode: true });
+            } catch (error) {
+                console.warn(`无法读取或解析文件 ${fullPath}:`, error);
+            }
+        }
+
+        // 获取所有消息定义
+        try {
+            // 尝试不同的方式获取消息
+            const allMessages = root.nestedArray?.filter(item => item instanceof protobuf.Type) || [];
+
+            for (const message of allMessages) {
+                const messageName = message.name;
+                if (messageName && messageName.endsWith('Req')) {
+                    // 尝试获取字段
+                    let fields: protobuf.Field[] = [];
+                    try {
+                        if (message.fields) {
+                            fields = Object.values(message.fields);
+                        } else if (message.fieldsArray) {
+                            fields = message.fieldsArray;
+                        }
+                    } catch (error) {
+                        console.warn(`无法获取消息 ${messageName} 的字段:`, error);
+                    }
+
+                    messages.push({
+                        name: messageName,
+                        fields: fields
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('解析proto消息时出错:', error);
+        }
+
+        return messages;
+    }
+
+    generateProtoNetworkFile(protoRoot: string, protoFileName: string): { networkFile: LuaFileTemplate, handlerFunctions: string[] } {
+        const fileName = 'network.lua';
+        const filePath = path.join(this.config.targetModulePath, fileName);
+
+        let content = `${this.createFileHeader(fileName)}
+local ${this.config.moduleName}_tools = ${this.getToolsRequirePath()}
+local playerhandler = require "player.playerhandler.init"
+
+local M = hotupdate_module()
+
+-- ******************************************** ↓协议接口↓ ********************************************
+`;
+
+        const messages = this.parseProtoMessages(protoRoot, protoFileName);
+        const handlerFunctions: string[] = [];
+
+        for (const message of messages) {
+            const messageName = message.name;
+            const functionName = `${messageName}`;
+            const checkCode = this.generateFieldChecks(message as unknown as protobuf.Type, messageName);
+            const respName = messageName.replace(/Req$/, 'Resp');
+
+            // 生成网络处理函数
+            content += `
+function M.${functionName}(pid, msg)
+${checkCode}
+    local result = playerhandler.${this.config.moduleName}.${messageName}(pid, msg)
+    if result == nil then
+        -- 模块内部处理返回协议相关的逻辑
+        return
+    end
+    return "${respName}", result
+end
+`;
+
+            // 生成对应的handler函数
+            handlerFunctions.push(this.generateHandlerFunction(messageName));
+        }
+
+        content += `\n-- ******************************************** ↓RPC接口↓ ********************************************`;
+        content += `\nreturn M`;
+
+        const networkFile: LuaFileTemplate = { fileName, filePath, content };
+
+        return { networkFile, handlerFunctions };
+    }
+
     generateAllFiles(isProtoModule: boolean = false, protoRoot?: string, protoFileName?: string): LuaFileTemplate[] {
         const files: LuaFileTemplate[] = [
             this.generateToolsFile(),
             this.generateGmFile(),
             this.generateEventFile(),
-            this.generateMainFile(),
         ];
 
         if (isProtoModule && protoRoot && protoFileName) {
-            files.push(this.generateProtoNetworkFile(protoRoot, protoFileName));
+            try {
+                const { networkFile, handlerFunctions } = this.generateProtoNetworkFile(protoRoot, protoFileName);
+                files.push(this.generateMainFile(handlerFunctions));
+                files.push(networkFile);
+            } catch (error) {
+                console.error('生成Proto模块文件时出错:', error);
+                // 如果出错，回退到普通模式
+                files.push(this.generateMainFile());
+                files.push(this.generateNetworkFile());
+            }
         } else {
+            files.push(this.generateMainFile());
             files.push(this.generateNetworkFile());
         }
 
@@ -363,6 +453,11 @@ export class ModuleCreationManager {
 
     private writeFiles(files: LuaFileTemplate[]): void {
         for (const file of files) {
+            // 确保目录存在
+            const dir = path.dirname(file.filePath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
             fs.writeFileSync(file.filePath, file.content);
         }
     }
@@ -428,33 +523,7 @@ export class ModuleCreationManager {
     }
 
     async createProtoModule(): Promise<void> {
-
         try {
-            // 1. 选择Proto文件
-            // const fileUris = await vscode.window.showOpenDialog({
-            //     title: '选择Proto文件',
-            //     filters: {
-            //         'Protocol Buffer文件': ['proto'],
-            //         '所有文件': ['*']
-            //     },
-            //     canSelectMany: false,
-            //     openLabel: '选择'
-            // });
-
-            // if (!fileUris || fileUris.length === 0) {
-            //     vscode.window.showInformationMessage('未选择文件');
-            //     return;
-            // }
-
-            // const selectedFile = fileUris[0];
-            // const filePath = selectedFile.fsPath;
-
-            // // 2. 验证文件扩展名
-            // if (!filePath.toLowerCase().endsWith('.proto')) {
-            //     vscode.window.showErrorMessage('请选择.proto文件');
-            //     return;
-            // }
-
             // 1. 选择Proto文件
             let activeEditor = vscode.window.activeTextEditor;
             if (!activeEditor) {
@@ -504,6 +573,7 @@ export class ModuleCreationManager {
 
         } catch (error) {
             vscode.window.showErrorMessage(`创建Proto模块时出错: ${error}`);
+            console.error('创建Proto模块详细错误:', error);
         }
     }
 }
